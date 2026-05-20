@@ -21,17 +21,19 @@ export const NPCCard: React.FC<NPCCardProps> = ({ npc, tagDefs, onSave, isSaved 
 
   // Safe tag formatting helper
   const getTagModifiersBreakdown = () => {
-    const uniqueTags = Array.from(new Set(npc.tagsMemoria)) as string[];
+    const memoryObj = npc.tagsMemoria || {};
+    const uniqueTags = Object.keys(memoryObj);
     const list: { tag: string; saude: number; fel: number; renda: number }[] = [];
     
     for (const tag of uniqueTags) {
       const def = tagDefs.find((t) => t.tag.toLowerCase() === tag.toLowerCase());
+      const peso = memoryObj[tag] ?? 1.0;
       if (def && (def.mod_saude !== 0 || def.mod_felicidade !== 0 || def.mod_renda_mensal !== 0)) {
         list.push({
           tag: def.tag,
-          saude: def.mod_saude,
-          fel: def.mod_felicidade,
-          renda: def.mod_renda_mensal,
+          saude: def.mod_saude * peso,
+          fel: def.mod_felicidade * peso,
+          renda: def.mod_renda_mensal * peso,
         });
       }
     }
@@ -201,11 +203,12 @@ export const NPCCard: React.FC<NPCCardProps> = ({ npc, tagDefs, onSave, isSaved 
           Tags Acumuladas na Memória
         </h4>
         <div className="flex flex-wrap gap-2 p-3.5 rounded-xl bg-slate-950/40 border border-slate-800 min-h-[50px] backdrop-blur-sm">
-          {npc.tagsMemoria.length > 0 ? (
-            npc.tagsMemoria.map((tag, idx) => {
+          {Object.keys(npc.tagsMemoria || {}).length > 0 ? (
+            Object.entries(npc.tagsMemoria || {}).map(([tag, pesoVal], idx) => {
+              const peso = Number(pesoVal) || 1.0;
               const def = tagDefs.find((t) => t.tag.toLowerCase() === tag.toLowerCase());
               const bonusText = def 
-                ? `${def.mod_saude ? ` Saúde: ${def.mod_saude > 0 ? "+" : ""}${def.mod_saude}` : ""}${def.mod_felicidade ? ` Fel.: ${def.mod_felicidade > 0 ? "+" : ""}${def.mod_felicidade}` : ""}${def.mod_renda_mensal ? ` Renda: R$ ${def.mod_renda_mensal}` : ""}`
+                ? `${def.mod_saude ? ` Saúde: ${def.mod_saude > 0 ? "+" : ""}${def.mod_saude * peso}` : ""}${def.mod_felicidade ? ` Fel.: ${def.mod_felicidade > 0 ? "+" : ""}${def.mod_felicidade * peso}` : ""}${def.mod_renda_mensal ? ` Renda: R$ ${def.mod_renda_mensal * peso}` : ""}`
                 : "";
                 
               return (
@@ -214,7 +217,7 @@ export const NPCCard: React.FC<NPCCardProps> = ({ npc, tagDefs, onSave, isSaved 
                   className="group relative text-[11px] font-mono py-1 px-3 rounded-full bg-slate-900/80 hover:bg-slate-850/90 text-amber-400 border border-amber-500/20 shadow-sm backdrop-blur-sm transition-all cursor-help select-all"
                   title={bonusText ? `Efeitos: ${bonusText}` : "Sem modificadores diretos"}
                 >
-                  {tag}
+                  {tag} <span className="text-[9px] text-amber-500 font-bold">[{peso.toFixed(1)}]</span>
                   {bonusText && (
                     <span className="opacity-0 group-hover:opacity-100 pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-2.5 bg-[#0a0b10] border border-slate-800 text-slate-300 text-[10px] rounded-lg shadow-2xl w-52 text-center transition-all z-20 font-mono">
                       <strong className="text-ice">Modificador Tag:</strong>

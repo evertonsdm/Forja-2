@@ -53,7 +53,7 @@ export interface NPC {
   estado: Estado;
   cidade?: CidadeDef;
   profissao: string;
-  tagsMemoria: string[];
+  tagsMemoria: Record<string, number>;
   saude: number;
   felicidade: number;
   renda: number;

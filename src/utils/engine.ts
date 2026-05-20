@@ -2,6 +2,62 @@ import { Demografia, Socioeconomico, TagDef, Estado, NomeDef, CidadeDef, NPC } f
 import { cyrb128, mulberry32, chooseWeighted, randRange } from "./prng";
 
 /**
+ * Helper to parse a tag string into name and optional custom weight.
+ * e.g., "Jovem:2.5" -> { name: "Jovem", weight: 2.5 }
+ * e.g., "Homem" -> { name: "Homem", weight: 1.0 }
+ */
+export function parseCleanTag(rawTag: string): { name: string; weight: number } | null {
+  if (!rawTag) return null;
+  const cleanStr = rawTag.replace(/[\[\]"']/g, "").trim().replace(/[\r\n\t]/g, "");
+  if (!cleanStr || cleanStr === "none" || cleanStr === "null") return null;
+
+  const colonIndex = cleanStr.indexOf(":");
+  let name = cleanStr;
+  let weight = 1.0;
+  if (colonIndex !== -1) {
+    name = cleanStr.substring(0, colonIndex).trim();
+    const parsedWeight = parseFloat(cleanStr.substring(colonIndex + 1).trim());
+    if (!isNaN(parsedWeight)) {
+      weight = parsedWeight;
+    }
+  }
+  return { name, weight };
+}
+
+/**
+ * Utility to parse and feed tags with weights into the NPC memory object.
+ */
+export function addTagsToMemory(npcMemoria: Record<string, number>, tags: string[] | undefined) {
+  if (!tags) return;
+  for (const rawTag of tags) {
+    const parsed = parseCleanTag(rawTag);
+    if (parsed) {
+      npcMemoria[parsed.name] = parsed.weight;
+    }
+  }
+}
+
+/**
+ * Checks if a target tag is present in the memory (case-insensitive).
+ */
+export function hasTag(npcMemoria: Record<string, number>, tagToCheck: string): boolean {
+  if (!tagToCheck) return false;
+  const cleanTag = tagToCheck.trim().toLowerCase();
+  return Object.keys(npcMemoria).some(k => k.toLowerCase() === cleanTag);
+}
+
+/**
+ * Retrieves the weight associated with a tag from the memory (case-insensitive).
+ * Defaults to 1.0 if not present.
+ */
+export function getTagWeight(npcMemoria: Record<string, number>, tagToCheck: string): number {
+  if (!tagToCheck) return 1.0;
+  const cleanTag = tagToCheck.trim().toLowerCase();
+  const matchedKey = Object.keys(npcMemoria).find(k => k.toLowerCase() === cleanTag);
+  return matchedKey ? (npcMemoria[matchedKey] ?? 1.0) : 1.0;
+}
+
+/**
  * Executes the RuleForge generation cascade to build a deterministic NPC based on a seed.
  */
 export function generateNPC(
@@ -62,7 +118,7 @@ export function generateNPC(
     }
   }
 
-  // REFORÇO NA MEMÓRIA DE TAGS (PARIDADE)
+  // REFORÇO NA MEMÓRIA DE TAGS (PARIDADE E DICIONÁRIO DE PESO)
   // Certificando de que a tag de identificação do estado (ex: UF_SP) seja adicionada limpa de caracteres ocultos ou quebras de linha
   const siglaEstadoClean = (estadoSorteado.id_estado || "")
     .replace("EST_", "")
@@ -71,14 +127,9 @@ export function generateNPC(
     .toUpperCase();
   const ufTag = `UF_${siglaEstadoClean}`;
 
-  const estadoTagsNormalizadas = (estadoSorteado.add_tags || [])
-    .map(t => t.replace(/[\[\]"']/g, "").trim().replace(/[\r\n\t]/g, ""))
-    .filter(t => t.length > 0);
-
-  const npcMemoria: string[] = Array.from(new Set([
-    ufTag,
-    ...estadoTagsNormalizadas
-  ])).filter(t => t.length > 0);
+  const npcMemoria: Record<string, number> = {};
+  addTagsToMemory(npcMemoria, [ufTag]);
+  addTagsToMemory(npcMemoria, estadoSorteado.add_tags);
 
   // FASE 0.5: CIDADE (MICRO-GEOGRAFIA)
   let cidadeSorteada: CidadeDef | undefined = undefined;
@@ -90,15 +141,16 @@ export function generateNPC(
       // Converter e normalizar os itens das listas, e verificar se pelo menos um dos itens de req_tags está contido no npcMemoria
       const cidadesValidas = cities.filter((c) => {
         const reqTags = (c.req_tags || [])
-          .map(t => t.replace(/[\[\]"']/g, "").trim().replace(/[\r\n\t]/g, ""))
-          .filter(t => t.length > 0);
+          .map(t => parseCleanTag(t))
+          .filter((t): t is { name: string; weight: number } => t !== null);
 
         if (reqTags.length === 0) return true;
-        return reqTags.some((tag) => npcMemoria.includes(tag));
+        return reqTags.some((tag) => hasTag(npcMemoria, tag.name));
       });
 
       // DEBUGGING DE VISIBILIDADE (Logs de rastreamento)
-      console.log(`Tags atuais do NPC: [${npcMemoria.join(", ")}]`);
+      const tagsListForLog = Object.entries(npcMemoria).map(([k, v]) => `${k}:${v}`);
+      console.log(`Tags atuais do NPC: [${tagsListForLog.join(", ")}]`);
       console.log(`Cidades filtradas pelo estado: [${cidadesValidas.map(c => c.nome_cidade).join(", ")}]`);
 
       let cidadesParaSorteio = cidadesValidas;
@@ -111,16 +163,25 @@ export function generateNPC(
       }
 
       if (cidadesParaSorteio.length > 0) {
-        const weightsCidades = cidadesParaSorteio.map((c) => c.peso_base);
+        const weightsCidades = cidadesParaSorteio.map((c) => {
+          let pesoFinal = c.peso_base;
+          const reqTags = (c.req_tags || [])
+            .map(t => parseCleanTag(t))
+            .filter((t): t is { name: string; weight: number } => t !== null);
+          
+          for (const rt of reqTags) {
+            if (hasTag(npcMemoria, rt.name)) {
+              pesoFinal *= getTagWeight(npcMemoria, rt.name);
+            }
+          }
+          return pesoFinal;
+        });
         cidadeSorteada = chooseWeighted(cidadesParaSorteio, weightsCidades, rand);
       }
     }
 
     if (cidadeSorteada && cidadeSorteada.add_tags) {
-      const cidadeTagsNormalizadas = cidadeSorteada.add_tags
-        .map(t => t.replace(/[\[\]"']/g, "").trim().replace(/[\r\n\t]/g, ""))
-        .filter(t => t.length > 0);
-      npcMemoria.push(...cidadeTagsNormalizadas);
+      addTagsToMemory(npcMemoria, cidadeSorteada.add_tags);
     }
   }
 
@@ -138,10 +199,10 @@ export function generateNPC(
   
   // Append demographic tags
   if (perfilSorteado.add_tags) {
-    npcMemoria.push(...perfilSorteado.add_tags);
+    addTagsToMemory(npcMemoria, perfilSorteado.add_tags);
   }
 
-  // FASE 1.5: PROCEDURAL NAME RESOLUTION (nomes matching requirement tags in memory)
+  // FASE 1.5: PROCEDURAL NAME RESOLUTION
   let nomeSorteado = "Cidadão Anônimo";
   if (names.length > 0) {
     if (locks?.nomeId) {
@@ -150,11 +211,23 @@ export function generateNPC(
     } else {
       const nomesValidos = names.filter((n) => {
         if (!n.req_tags || n.req_tags.length === 0) return true;
-        return n.req_tags.every((tag) => npcMemoria.includes(tag));
+        return n.req_tags.every((tag) => hasTag(npcMemoria, tag));
       });
 
       if (nomesValidos.length > 0) {
-        const weightsNomes = nomesValidos.map((n) => n.peso_base);
+        const weightsNomes = nomesValidos.map((n) => {
+          let pesoFinal = n.peso_base;
+          const reqTags = (n.req_tags || [])
+            .map(t => parseCleanTag(t))
+            .filter((t): t is { name: string; weight: number } => t !== null);
+          
+          for (const rt of reqTags) {
+            if (hasTag(npcMemoria, rt.name)) {
+              pesoFinal *= getTagWeight(npcMemoria, rt.name);
+            }
+          }
+          return pesoFinal;
+        });
         const escolhido = chooseWeighted(nomesValidos, weightsNomes, rand);
         nomeSorteado = escolhido.nome;
       } else {
@@ -174,7 +247,7 @@ export function generateNPC(
     if (found) {
       ocupacaoEscolhida = found.profissao;
       if (found.add_tags) {
-        npcMemoria.push(...found.add_tags);
+        addTagsToMemory(npcMemoria, found.add_tags);
       }
     }
   } else {
@@ -182,16 +255,26 @@ export function generateNPC(
 
     for (const row of socioeconomicoList) {
       // Restrictive Tag Validation (all req_tags must be present in actor memory tags)
-      const reqsMatch = row.req_tags.every((req) => npcMemoria.includes(req));
+      const reqTags = (row.req_tags || [])
+        .map((t) => parseCleanTag(t))
+        .filter((t): t is { name: string; weight: number } => t !== null);
+        
+      const reqsMatch = reqTags.every((req) => hasTag(npcMemoria, req.name));
       
       if (reqsMatch) {
         // Dynamic weight multiplication based on math multipliers
         let pesoFinal = row.peso_base;
         
+        // Multiplier from req_tags in npcMemoria
+        for (const rt of reqTags) {
+          pesoFinal *= getTagWeight(npcMemoria, rt.name);
+        }
+        
+        // Multiplier from mult_tags: replacing spreadsheet constant multipliers with the tag weight inside npc_memoria!
         if (row.mult_tags) {
-          for (const [tag, multiplier] of Object.entries(row.mult_tags)) {
-            if (npcMemoria.includes(tag)) {
-              pesoFinal *= multiplier;
+          for (const [tag, multiplierFromCode] of Object.entries(row.mult_tags)) {
+            if (hasTag(npcMemoria, tag)) {
+              pesoFinal *= getTagWeight(npcMemoria, tag);
             }
           }
         }
@@ -209,15 +292,12 @@ export function generateNPC(
       ocupacaoEscolhida = profissaoSorteada.profissao;
       // Append tags
       if (profissaoSorteada.add_tags) {
-        npcMemoria.push(...profissaoSorteada.add_tags);
+        addTagsToMemory(npcMemoria, profissaoSorteada.add_tags);
       }
     }
   }
 
   // FASE 3: RESOLUÇÃO FINAL (STATUS RESOLUTION)
-  // We perform unique filtering matching df_tags[df_tags['tag'].isin(npc_memoria)]
-  const uniqueTags = Array.from(new Set(npcMemoria));
-  
   const saudeBase = 100;
   const felicidadeBase = 50;
   
@@ -225,12 +305,12 @@ export function generateNPC(
   let modFelicidadeSoma = 0;
   let modRendaSoma = 0;
 
-  for (const tag of uniqueTags) {
+  for (const [tag, peso] of Object.entries(npcMemoria)) {
     const matchedDef = tagDefList.find((t) => t.tag.toLowerCase() === tag.toLowerCase());
     if (matchedDef) {
-      modSaudeSoma += matchedDef.mod_saude;
-      modFelicidadeSoma += matchedDef.mod_felicidade;
-      modRendaSoma += matchedDef.mod_renda_mensal;
+      modSaudeSoma += matchedDef.mod_saude * peso;
+      modFelicidadeSoma += matchedDef.mod_felicidade * peso;
+      modRendaSoma += matchedDef.mod_renda_mensal * peso;
     }
   }
 

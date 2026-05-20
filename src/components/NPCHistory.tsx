@@ -23,7 +23,7 @@ export const NPCHistory: React.FC<NPCHistoryProps> = ({
       npc.profissao.toLowerCase().includes(s) ||
       npc.demografia.descricao.toLowerCase().includes(s) ||
       npc.seed.toLowerCase().includes(s) ||
-      npc.tagsMemoria.some((t) => t.toLowerCase().includes(s))
+      Object.keys(npc.tagsMemoria || {}).some((t) => t.toLowerCase().includes(s))
     );
   });
 
