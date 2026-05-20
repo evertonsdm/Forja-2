@@ -6,22 +6,17 @@ import {
   ArrowDown, 
   Lock, 
   Unlock, 
-  Plus, 
   Check, 
   RotateCcw, 
   Workflow, 
-  HelpCircle,
-  FileSpreadsheet,
-  AlertCircle,
-  Search,
-  Sliders,
-  Sparkles,
-  Tag,
-  Briefcase,
-  MapPin,
-  Map,
-  User,
-  Info
+  Plus, 
+  Search, 
+  FileSpreadsheet, 
+  Info,
+  FolderOpen,
+  Filter,
+  X,
+  Sliders
 } from "lucide-react";
 
 interface BlockMatrixEditorProps {
@@ -47,10 +42,10 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
   onResetFromSheets,
   isSyncing,
 }) => {
-  // Active rule tab being shown as Scratch Jigsaw Blocks
+  // Active sub-tab target
   const [activeSubTab, setActiveSubTab] = useState<"demo" | "socio" | "cid" | "est" | "nom" | "tags">("demo");
 
-  // Local rule databases isolated from the simulation engine until external copy and sheets re-import
+  // Local copies of rules for isolation
   const [localDemo, setLocalDemo] = useState<Demografia[]>([]);
   const [localSocio, setLocalSocio] = useState<Socioeconomico[]>([]);
   const [localCid, setLocalCid] = useState<CidadeDef[]>([]);
@@ -58,19 +53,23 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
   const [localNom, setLocalNom] = useState<NomeDef[]>([]);
   const [localTags, setLocalTags] = useState<TagDef[]>([]);
 
-  // Search filter query targeting 'propriedade > chave' or simple match
+  // Search filter query
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Input weight error validations
+  // Input validation errors
   const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
 
-  // Local locks state for independent tracking of custom locks on weight options
+  // Local locks flags for weight options
   const [localLocks, setLocalLocks] = useState<Record<string, boolean>>({});
 
-  // Clipboard copy-paste status action tracker
+  // Sheet export feedback tracker
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
 
-  // Sync state arrays when original data sources are synchronized or refreshed
+  // Selected Block key state to focus editing on exactly ONE chosen block
+  // Format: `${activeSubTab}_${index}` e.g., "demo_0", "nom_142"
+  const [selectedBlockKey, setSelectedBlockKey] = useState<string | null>(null);
+
+  // Sync state arrays when parents change
   useEffect(() => {
     setLocalDemo(JSON.parse(JSON.stringify(demografia)));
   }, [demografia]);
@@ -95,45 +94,15 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     setLocalTags(JSON.parse(JSON.stringify(tagDef)));
   }, [tagDef]);
 
-  // Handle local soft resets from source master values
+  // Handle local soft resets
   const handleResetLocalMatrix = async () => {
     if (window.confirm("Deseja realmente perder as modificações locais deste Editor de Blocos e re-sincronizar os originais da planilha?")) {
       await onResetFromSheets();
+      setSelectedBlockKey(null);
     }
   };
 
-  // Helper to determine whether a given property input should be shown inside a block
-  const shouldShowProperty = (propertyName: string, itemKeyOrId: string): boolean => {
-    if (!searchQuery) return false;
-    
-    const query = searchQuery.toLowerCase().trim();
-    if (query === "*" || query === "all" || query === "tudo") return true;
-
-    // Check if the query specifically targets this specific property
-    const propMatches = propertyName.toLowerCase().includes(query) || query.includes(propertyName.toLowerCase());
-    if (propMatches) return true;
-
-    // Check if user is searching for a specific Key/ID inside blocks to edit
-    const keyMatches = itemKeyOrId.toLowerCase().includes(query) || query.includes(itemKeyOrId.toLowerCase());
-    if (keyMatches) return true;
-
-    // Handle "propriedade > chave" format e.g., "Demografia > peso_base"
-    if (query.includes(">")) {
-      const parts = query.split(">").map(p => p.trim());
-      const queryPart1 = parts[0];
-      const queryPart2 = parts[1];
-
-      const match1 = (propertyName.toLowerCase().includes(queryPart1) || activeSubTab.toLowerCase().includes(queryPart1) || itemKeyOrId.toLowerCase().includes(queryPart1)) &&
-                     (propertyName.toLowerCase().includes(queryPart2) || itemKeyOrId.toLowerCase().includes(queryPart2) || queryPart2 === "");
-      const match2 = (propertyName.toLowerCase().includes(queryPart2) || activeSubTab.toLowerCase().includes(queryPart2) || itemKeyOrId.toLowerCase().includes(queryPart2)) &&
-                     (propertyName.toLowerCase().includes(queryPart1) || itemKeyOrId.toLowerCase().includes(queryPart1) || queryPart1 === "");
-      return match1 || match2;
-    }
-
-    return false;
-  };
-
-  // weight normalization helper supporting floats, commas, and dots
+  // Helper validation for floats/commas
   const getNormalizedWeight = (rawVal: string, blockKey: string): { val: number; cleanStr: string } => {
     let cleanStr = rawVal;
     const hasInvalid = /[^0-9.,]/.test(cleanStr);
@@ -162,7 +131,7 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     };
   };
 
-  // Tag list parser & builders
+  // Input array tag parsers
   const parseTagsInput = (text: string): string[] => {
     return text.split(/[,;\s]+/).map(t => t.trim()).filter(t => t.length > 0);
   };
@@ -188,18 +157,18 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     return Object.entries(rec).map(([k, v]) => `${k}:${v}`).join(", ");
   };
 
-  // Custom Tag badges renderer
-  const renderTagPill = (tag: string, onRemove: () => void, colorHex: string) => {
+  // Tag Badge Pill render
+  const renderTagPill = (tag: string, onRemove: () => void) => {
     return (
       <span 
         key={tag} 
-        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono leading-none font-bold text-stone-900 border border-black/10 shadow-sm transition-all bg-white/70 hover:bg-white"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono leading-none font-bold text-slate-100 bg-white/20 hover:bg-white/30 border border-white/10"
       >
         <span>{tag}</span>
         <button
           type="button"
           onClick={onRemove}
-          className="hover:text-red-650 font-black focus:outline-none text-[11px] leading-none px-0.5 -mt-0.5 cursor-pointer"
+          className="hover:text-red-400 font-extrabold focus:outline-none text-[8px] leading-none px-0.5 cursor-pointer text-slate-300"
           title="Remover Tag"
         >
           ×
@@ -208,45 +177,53 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     );
   };
 
+  // Shift block prioritization list
   const moveBlockUp = (index: number) => {
     if (index === 0) return;
-    
+    const targetKeyBase = `${activeSubTab}_`;
+
     if (activeSubTab === "demo") {
       const copy = [...localDemo];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalDemo(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     } else if (activeSubTab === "socio") {
       const copy = [...localSocio];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalSocio(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     } else if (activeSubTab === "cid") {
       const copy = [...localCid];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalCid(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     } else if (activeSubTab === "est") {
       const copy = [...localEst];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalEst(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     } else if (activeSubTab === "nom") {
       const copy = [...localNom];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalNom(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     } else if (activeSubTab === "tags") {
       const copy = [...localTags];
       const temp = copy[index];
       copy[index] = copy[index - 1];
       copy[index - 1] = temp;
       setLocalTags(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index - 1}`);
     }
   };
 
@@ -260,6 +237,7 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     else if (activeSubTab === "tags") limit = localTags.length;
 
     if (index >= limit - 1) return;
+    const targetKeyBase = `${activeSubTab}_`;
 
     if (activeSubTab === "demo") {
       const copy = [...localDemo];
@@ -267,40 +245,46 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalDemo(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     } else if (activeSubTab === "socio") {
       const copy = [...localSocio];
       const temp = copy[index];
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalSocio(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     } else if (activeSubTab === "cid") {
       const copy = [...localCid];
       const temp = copy[index];
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalCid(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     } else if (activeSubTab === "est") {
       const copy = [...localEst];
       const temp = copy[index];
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalEst(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     } else if (activeSubTab === "nom") {
       const copy = [...localNom];
       const temp = copy[index];
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalNom(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     } else if (activeSubTab === "tags") {
       const copy = [...localTags];
       const temp = copy[index];
       copy[index] = copy[index + 1];
       copy[index + 1] = temp;
       setLocalTags(copy);
+      setSelectedBlockKey(`${targetKeyBase}${index + 1}`);
     }
   };
 
-  // Creators & Destroyers
+  // Creators
   const createBlankBlock = () => {
     const uniqueNum = Math.floor(100 + Math.random() * 900);
     const uniqueId = `nb_${uniqueNum}`;
@@ -308,48 +292,58 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     if (activeSubTab === "demo") {
       const newItem: Demografia = {
         id_demo: `DEMO_${uniqueNum}`,
-        descricao: "Nova Idade",
+        descricao: "NovaIdade",
         idade_min: 18,
         idade_max: 50,
         peso_base: 1.0,
         add_tags: ["nova_tag"],
       };
-      setLocalDemo([...localDemo, newItem]);
+      setLocalDemo([newItem, ...localDemo]);
+      setSelectedBlockKey("demo_0");
+      setSearchQuery(newItem.id_demo);
     } else if (activeSubTab === "socio") {
       const newItem: Socioeconomico = {
         id_socio: uniqueId,
-        profissao: "Profissão Especialista",
+        profissao: "Profissao Profissional",
         req_tags: [],
         mult_tags: {},
         peso_base: 1.0,
         add_tags: ["especialista"],
       };
-      setLocalSocio([...localSocio, newItem]);
+      setLocalSocio([newItem, ...localSocio]);
+      setSelectedBlockKey("socio_0");
+      setSearchQuery(newItem.id_socio);
     } else if (activeSubTab === "cid") {
       const newItem: CidadeDef = {
         id_cidade: `cid_${uniqueNum}`,
-        nome_cidade: "Nova Metrópole",
+        nome_cidade: "Nova Cidade",
         req_tags: [],
         peso_base: 1.0,
         add_tags: [],
       };
-      setLocalCid([...localCid, newItem]);
+      setLocalCid([newItem, ...localCid]);
+      setSelectedBlockKey("cid_0");
+      setSearchQuery(newItem.id_cidade);
     } else if (activeSubTab === "est") {
       const newItem: Estado = {
-        id_estado: `E${uniqueNum.toString().slice(0, 1)}`,
-        nome_estado: "Território Geral",
+        id_estado: `EST_N_${uniqueNum}`,
+        nome_estado: "Novo Estado",
         peso_base: 1.0,
         add_tags: [],
       };
-      setLocalEst([...localEst, newItem]);
+      setLocalEst([newItem, ...localEst]);
+      setSelectedBlockKey("est_0");
+      setSearchQuery(newItem.id_estado);
     } else if (activeSubTab === "nom") {
       const newItem: NomeDef = {
         id_nome: `nome_${uniqueNum}`,
-        nome: "Nome Elegante",
+        nome: "NovoNome",
         req_tags: [],
         peso_base: 1.0,
       };
-      setLocalNom([...localNom, newItem]);
+      setLocalNom([newItem, ...localNom]);
+      setSelectedBlockKey("nom_0");
+      setSearchQuery(newItem.id_nome);
     } else if (activeSubTab === "tags") {
       const newItem: TagDef = {
         tag: `nova_tag_${uniqueNum}`,
@@ -357,7 +351,9 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
         mod_felicidade: 0,
         mod_renda_mensal: 0,
       };
-      setLocalTags([...localTags, newItem]);
+      setLocalTags([newItem, ...localTags]);
+      setSelectedBlockKey("tags_0");
+      setSearchQuery(newItem.tag);
     }
   };
 
@@ -375,6 +371,7 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
     } else if (activeSubTab === "tags") {
       setLocalTags(localTags.filter((_, i) => i !== index));
     }
+    setSelectedBlockKey(null);
   };
 
   const toggleLocalLock = (blockKey: string) => {
@@ -445,67 +442,189 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
 
   const getSubTabColor = (tab: "demo" | "socio" | "cid" | "est" | "nom" | "tags") => {
     switch (tab) {
-      case "demo": return "#ffb200";
-      case "socio": return "#9966ff";
-      case "cid": return "#0099ff";
-      case "est": return "#5cb85c";
-      case "nom": return "#ff6680";
-      case "tags": return "#ff8c1a";
+      case "demo": return "#e29e00";
+      case "socio": return "#884df2";
+      case "cid": return "#0088e5";
+      case "est": return "#4caf50";
+      case "nom": return "#e91e63";
+      case "tags": return "#ff6f00";
     }
   };
 
   const activeColor = getSubTabColor(activeSubTab);
 
-  return (
-    <div id="ruleforge-block-editor-view" className="space-y-6 text-slate-100 animate-fade-in text-left">
-      
-      {/* SECTION HEADER BLOCK */}
-      <div className="bg-[#12141c]/95 border border-slate-800/80 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-32 h-32 bg-[#FFBF00]/5 rounded-full filter blur-2xl pointer-events-none" />
+  // Filter items in active tab according to searchQuery
+  // Highly optimized: supports city-to-state logical linkage and strictly cuts off lists of large entries!
+  const getFilteredItems = () => {
+    if (!searchQuery) return [];
 
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[#9966ff]/10 border border-[#9966ff]/25 shrink-0">
-              <Workflow className="w-5 h-5 text-[#9966ff]" />
+    const query = searchQuery.toLowerCase().trim();
+    const isShowAll = query === "*" || query === "all" || query === "tudo";
+
+    if (activeSubTab === "demo") {
+      return localDemo
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (isShowAll) return true;
+          return item.id_demo.toLowerCase().includes(query) || 
+                 item.descricao.toLowerCase().includes(query) ||
+                 item.add_tags.some(t => t.toLowerCase().includes(query));
+        });
+    }
+
+    if (activeSubTab === "socio") {
+      return localSocio
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (isShowAll) return true;
+          return (item.id_socio || "").toLowerCase().includes(query) || 
+                 item.profissao.toLowerCase().includes(query) ||
+                 item.req_tags.some(t => t.toLowerCase().includes(query)) ||
+                 (item.add_tags || []).some(t => t.toLowerCase().includes(query));
+        });
+    }
+
+    if (activeSubTab === "cid") {
+      return localCid
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (isShowAll) return true;
+          return item.id_cidade.toLowerCase().includes(query) || 
+                 item.nome_cidade.toLowerCase().includes(query) ||
+                 item.req_tags.some(t => t.toLowerCase().includes(query)) ||
+                 (item.add_tags || []).some(t => t.toLowerCase().includes(query));
+        });
+    }
+
+    // MANDATE REMINDER: "Estados por exemplo, eu não quero ver os blocos a partir da propriedade Estado. E sim só a partir da cidade que eu pesquisei. E ocultar as outras."
+    if (activeSubTab === "est") {
+      if (isShowAll) {
+        return localEst.map((item, idx) => ({ item, idx }));
+      }
+      // Look up our cities array to find any cities matching the query name or city ID
+      const matchingCityStateIds = localCid
+        .filter(c => c.nome_cidade.toLowerCase().includes(query) || c.id_cidade.toLowerCase().includes(query))
+        .flatMap(c => c.req_tags || []);
+
+      return localEst
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          // Direct match with matching parent state ID from cities search
+          const matchesByCity = matchingCityStateIds.includes(item.id_estado);
+          if (matchesByCity) return true;
+
+          // Fallback to direct name match ONLY if no city query matched
+          if (matchingCityStateIds.length === 0) {
+            return item.nome_estado.toLowerCase().includes(query) || 
+                   item.id_estado.toLowerCase().includes(query);
+          }
+          return false;
+        });
+    }
+
+    if (activeSubTab === "nom") {
+      return localNom
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (isShowAll) return true;
+          return item.id_nome.toLowerCase().includes(query) || 
+                 item.nome.toLowerCase().includes(query);
+        });
+    }
+
+    if (activeSubTab === "tags") {
+      return localTags
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => {
+          if (isShowAll) return true;
+          return item.tag.toLowerCase().includes(query);
+        });
+    }
+
+    return [];
+  };
+
+  const filteredItems = getFilteredItems();
+
+  // Auto-focus helper: if exactly 1 result returned, auto-select it to edit
+  useEffect(() => {
+    if (filteredItems.length === 1) {
+      setSelectedBlockKey(`${activeSubTab}_${filteredItems[0].idx}`);
+    } else {
+      // If active tab or query changes and multiple matches, let user choose, but keep existing selected if it stays in matches
+      const isStillInMatches = filteredItems.some(({ idx }) => selectedBlockKey === `${activeSubTab}_${idx}`);
+      if (!isStillInMatches) {
+        setSelectedBlockKey(null);
+      }
+    }
+  }, [searchQuery, activeSubTab]);
+
+  // Maximum search badges to render in grid to avoid crashing the browser (highly optimized!)
+  const SUGGESTS_LIMIT = 20;
+  const slicedSuggests = filteredItems.slice(0, SUGGESTS_LIMIT);
+  const totalMatchesCount = filteredItems.length;
+  const hasMoreThanLimit = totalMatchesCount > SUGGESTS_LIMIT;
+
+  // Retrieve focused selected indexing
+  const selectedIndex = selectedBlockKey && selectedBlockKey.startsWith(`${activeSubTab}_`)
+    ? parseInt(selectedBlockKey.split("_")[1], 10)
+    : -1;
+
+  return (
+    <div id="ruleforge-block-editor-view" className="space-y-3.5 text-slate-100 animate-fade-in text-left">
+      
+      {/* 1. COMPACT INTRO HEADER */}
+      <div className="bg-[#10121a]/95 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 relative overflow-hidden">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <div className="p-1 rounded-lg bg-[#884df2]/15 border border-[#884df2]/30 shrink-0">
+              <Workflow className="w-4 h-4 text-[#884df2]" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-black tracking-tight text-white uppercase font-display flex items-center gap-2">
-                Editor Compacto de Blocos Jigsaw
+              <h2 className="text-xs sm:text-sm font-black tracking-tight text-white uppercase font-display">
+                Editor de Matrix por Chaves Cirúrgicas
               </h2>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 font-mono leading-relaxed mt-0.5 max-w-2xl">
-                Lógica no-code em formato quebra-cabeça Scratch, ultra-compacto no mobile. Escolha qual atributo editar através do filtro inteligente abaixo.
+              <p className="text-[9px] text-[#FFBF00] font-mono">
+                Performance Máxima Otimizada. Exibição estritamente focada e leve para mobile.
               </p>
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleResetLocalMatrix}
-          disabled={isSyncing}
-          className="w-full md:w-auto py-2 px-3.5 bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:text-[#FFBF00] disabled:opacity-50 text-slate-300 font-bold font-mono text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer shrink-0"
-        >
-          <RotateCcw className={`w-3.5 h-3.5 text-[#FFBF00] ${isSyncing ? "animate-spin" : ""}`} />
-          <span>Resetar Originais</span>
-        </button>
+        <div className="flex gap-1.5 shrink-0 select-none">
+          <button
+            type="button"
+            onClick={createBlankBlock}
+            className="flex-1 py-1 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black font-mono text-[9px] uppercase rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-3 h-3" />
+            <span>Criar Bloco</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleResetLocalMatrix}
+            disabled={isSyncing}
+            className="py-1 px-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-[#FFBF00] disabled:opacity-40 text-slate-300 font-bold font-mono text-[9px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw className={`w-3 h-3 text-[#FFBF00] ${isSyncing ? "animate-spin" : ""}`} />
+            <span>Resetar</span>
+          </button>
+        </div>
       </div>
 
-      {/* MATRIX TABS BAR WITH BRIGHT SCRATCH STYLE ACCENTS */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      {/* 2. TAB TOGGLERS BAR */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 select-none">
         {(["demo", "socio", "cid", "est", "nom", "tags"] as const).map((tab) => {
-          const tabLabels: Record<string, string> = {
-            demo: "Demografias",
-            socio: "Profissões",
-            cid: "Cidades",
-            est: "Estados",
-            nom: "Nomes",
-            tags: "Tags/Atributos",
-          };
-          const tabCount = tab === "demo" ? localDemo.length :
-                           tab === "socio" ? localSocio.length :
-                           tab === "cid" ? localCid.length :
-                           tab === "est" ? localEst.length :
-                           tab === "nom" ? localNom.length : localTags.length;
+          const tabLabel = tab === "demo" ? "Demog." :
+                           tab === "socio" ? "Profiss." :
+                           tab === "cid" ? "Cidades" :
+                           tab === "est" ? "Estados" :
+                           tab === "nom" ? "Nomes" : "Tags";
+          const count = tab === "demo" ? localDemo.length :
+                        tab === "socio" ? localSocio.length :
+                        tab === "cid" ? localCid.length :
+                        tab === "est" ? localEst.length :
+                        tab === "nom" ? localNom.length : localTags.length;
                            
           const isSelected = activeSubTab === tab;
           const labelColor = getSubTabColor(tab);
@@ -513,47 +632,50 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
           return (
             <button
               key={tab}
-              onClick={() => { setActiveSubTab(tab); setExportFeedback(null); }}
-              className={`py-2 px-3 rounded-xl border text-[10px] sm:text-[11px] font-mono font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              onClick={() => { 
+                setActiveSubTab(tab); 
+                setExportFeedback(null); 
+              }}
+              className={`py-1 px-1 rounded-lg border text-[9px] font-mono font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
                 isSelected
-                  ? `border-[${labelColor}] text-[${labelColor}] shadow-md`
-                  : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-900/30"
+                  ? "shadow-sm"
+                  : "bg-slate-900/45 border-slate-900 text-slate-400 hover:text-slate-200"
               }`}
               style={isSelected ? { 
                 borderColor: labelColor, 
                 color: labelColor,
-                backgroundColor: `${labelColor}1a`
+                backgroundColor: `${labelColor}12`
               } : undefined}
             >
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: labelColor }} />
-              <span>{tabLabels[tab]} ({tabCount})</span>
+              <div className="w-1 rounded-full shrink-0 h-1.5" style={{ backgroundColor: labelColor }} />
+              <span>{tabLabel} <span className="opacity-55">({count})</span></span>
             </button>
           );
         })}
       </div>
 
-      {/* SEARCH PANEL: PROPRIEDADE > CHAVE SYSTEM (INTELLIGENT FOCUS ELEMENT) */}
-      <div className="bg-[#12141c] border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-xl">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      {/* 3. STRICT SEARCH CONTROL */}
+      <div className="bg-[#10121a] border border-slate-800/80 rounded-xl p-2 space-y-1.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
             <input
               type="text"
-              placeholder="🔍 Buscar Propriedade > Chave (Ex: peso_base, add_tags, ou Demografia > peso_base)"
+              placeholder="🔍 Busque uma chave, ID ou nome de cidade..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-800 focus:border-[#FFBF00] text-xs font-mono rounded-xl text-white outline-none focus:ring-1 focus:ring-[#FFBF00]/30 transition-all placeholder:text-slate-500"
+              className="w-full pl-8 pr-3 py-1 bg-slate-950 border border-slate-850 focus:border-[#FFBF00] text-[10px] sm:text-xs font-mono rounded-lg text-white outline-none focus:ring-1 focus:ring-[#FFBF00]/20 transition-all placeholder:text-slate-600"
             />
           </div>
 
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-1 shrink-0">
             <button
               type="button"
               onClick={() => setSearchQuery("*")}
-              className={`py-2 px-3.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer ${
+              className={`py-1 px-2.5 rounded-lg text-[9px] font-mono font-black border transition-all cursor-pointer ${
                 searchQuery === "*" 
                   ? "bg-[#ffbf00] text-slate-950 border-[#ffbf00]"
-                  : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                  : "bg-slate-900 text-slate-350 border-slate-800 hover:bg-slate-800"
               }`}
             >
               Exibir Tudo (*)
@@ -561,1218 +683,786 @@ export const BlockMatrixEditor: React.FC<BlockMatrixEditorProps> = ({
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="py-2 px-3 bg-slate-950 hover:bg-slate-900 border border-slate-850 text-slate-400 hover:text-white rounded-xl text-xs font-mono transition-all cursor-pointer"
-              title="Limpar filtro e ocultar tudo"
+              className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-400 hover:text-white rounded-lg text-[9px] font-mono transition-all cursor-pointer"
             >
               Ocultar
             </button>
           </div>
         </div>
 
-        {/* QUICK FIELD SELECTING SHORTCUT CHIPS */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-[9px] font-mono text-slate-500 uppercase font-black mr-1">Atalhos rápidos:</span>
-          {(["peso_base", "add_tags", "req_tags", "mult_tags", "idade", "descricao", "modificadores"] as const).map((pref) => (
-            <button
-              key={pref}
-              type="button"
-              onClick={() => setSearchQuery(pref)}
-              className={`px-2 py-0.5 rounded bg-slate-900 border text-[9px] font-mono transition-all cursor-pointer ${
-                searchQuery === pref
-                  ? "border-[#ffbf00] text-[#ffbf00] bg-slate-900"
-                  : "border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
-              }`}
-            >
-              {pref}
-            </button>
-          ))}
-        </div>
-
-        {/* CLUTTER FREE MODE FEEDBACK CAPTION */}
-        {!searchQuery && (
-          <div className="py-2.5 px-3 bg-[#9966ff]/5 border border-[#9966ff]/20 text-[#a78bfa] rounded-xl text-[10px] font-mono flex items-center gap-2">
-            <Info className="w-3.5 h-3.5 text-[#9966ff] shrink-0" />
+        {/* CLUTTER SILENT STATE */}
+        {!searchQuery ? (
+          <div className="py-1.5 px-2.5 rounded-lg bg-indigo-500/5 border border-dashed border-indigo-500/10 text-slate-400 text-[9px] font-mono flex items-start gap-1.5 leading-tight">
+            <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
             <span>
-              <strong>Modo Sem Poluição Ativo</strong>. Os campos de textos e pesos complexos estão ocultos para manter os blocos ultracompactos no celular. Busque uma propriedade ou clique nos atalhos para editá-los!
+              <strong>Modo Sem Sobrecarga</strong>. Nenhum bloco é renderizado por padrão. Busque algo (ex: digite <span className="text-[#FFBF00] font-bold cursor-pointer underline" onClick={() => setSearchQuery("sp")}>sp</span> ou clique no botão acima) para trazer à tona instantaneamente apenas a chave desejada.
             </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[9px] font-mono text-slate-400 leading-tight">
+            <span>Encontradas <strong>{totalMatchesCount}</strong> chaves correspondentes.</span>
+            {hasMoreThanLimit && (
+              <span className="text-amber-500 font-bold">⚠️ Exibindo as primeiras {SUGGESTS_LIMIT} linhas. Seja mais específico.</span>
+            )}
           </div>
         )}
       </div>
 
-      {/* EXPORT OPTIONS AND ACTIONS */}
-      <div className="bg-[#12141c]/45 border border-slate-900 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 text-[#9966ff] shrink-0" />
-          <span className="text-[10px] font-mono text-slate-400 leading-none">
-            Altere à vontade e clique no botão para copiar o TSV adaptado para Ctrl+V no Planilhas.
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={exportCurrentTabToSheetsClipboard}
-          className="w-full sm:w-auto py-2 px-4 bg-[#ffbf05] hover:bg-yellow-400 active:scale-95 text-slate-950 font-black font-mono text-[11px] uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shrink-0"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-slate-950" />
-          <span>Copiar Matriz</span>
-        </button>
-      </div>
-
-      {/* FEEDBACK STATUS BANNER */}
+      {/* TSV FEEDBACK BANNER */}
       {exportFeedback && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 rounded-xl text-xs font-mono flex items-start gap-2.5 shadow-xl animate-bounce">
-          <Check className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-[9px] font-mono flex items-start gap-2 shadow-sm animate-pulse">
+          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold">{exportFeedback}</p>
-            <p className="text-[10px] text-slate-450 mt-0.5">
-              Instruções: Abra o Google Sheets correspondente à aba <strong>{activeSubTab}</strong>, faça Ctrl+V na célula A1 para sobrescrever os dados originais se desejado.
-            </p>
+            <span className="font-bold">{exportFeedback} </span>
+            <span className="text-[8px] text-slate-400">Pode colar (Ctrl+V) de volta no Google Sheets correspondente.</span>
           </div>
         </div>
       )}
 
-      {/* THE BLOCKS WORKSPACE CANVAS */}
-      <div className="p-4 sm:p-6 rounded-2xl bg-[#0b0c10] border border-slate-950 shadow-inner relative overflow-hidden bg-[radial-gradient(#1e2433_1px,transparent_1px)] [background-size:20px_20px] min-h-[350px]">
-        <div className="absolute left-6 top-6 w-96 h-96 bg-[#9966ff]/2 rounded-full filter blur-3xl pointer-events-none" />
+      {/* TSV EXPORT ACTIONS */}
+      <div className="flex items-center justify-end select-none">
+        <button
+          onClick={exportCurrentTabToSheetsClipboard}
+          className="py-1 px-2.5 bg-[#ffbf00] text-slate-950 font-black font-mono text-[9px] uppercase tracking-wider rounded-lg hover:bg-yellow-400 transition-all flex items-center gap-1 cursor-pointer"
+        >
+          <FileSpreadsheet className="w-3 h-3 text-slate-950" />
+          <span>Copiar TSV da Aba</span>
+        </button>
+      </div>
 
-        {/* Vertical alignment jigsaw layout guide */}
-        <div className="absolute left-[36px] top-4 bottom-4 w-0.5 border-l border-dashed border-slate-800/30 z-0 pointer-events-none" />
+      {/* MAIN WORKSYMBOL CANVAS */}
+      <div className="p-2 sm:p-3 rounded-xl bg-[#08090d] border border-slate-900 shadow-inner min-h-[140px] flex flex-col gap-3">
+        
+        {/* Helper visual states when empty */}
+        {!searchQuery && (
+          <div className="py-8 flex flex-col items-center justify-center text-center text-slate-550">
+            <FolderOpen className="w-7 h-7 text-slate-800 mb-1.5 opacity-35" />
+            <p className="text-[10px] font-mono font-bold text-slate-500">Workspace Limpo</p>
+            <p className="text-[8px] text-slate-600 font-mono mt-0.5">
+              Refine a busca para editar.
+            </p>
+          </div>
+        )}
 
-        {/* Scrollable list containing blocks chain */}
-        <div className="space-y-[1px] relative z-20">
-          
-          {/* DEMOGRAFIA ACTIVE BLOCKS LIST */}
-          {activeSubTab === "demo" && localDemo.map((item, idx) => {
-            const blockKey = `demo_${idx}`;
-            const isLocked = !!localLocks[blockKey];
-            const errorMsg = inputErrors[blockKey];
-            const isFirst = idx === 0;
+        {searchQuery && totalMatchesCount === 0 && (
+          <div className="py-8 flex flex-col items-center justify-center text-center text-slate-550">
+            <Filter className="w-7 h-7 text-stone-700 mb-1.5 opacity-30" />
+            <p className="text-[10px] font-mono font-bold text-slate-500">Nenhuma correspondência</p>
+            <p className="text-[8px] text-slate-600 mt-0.5">
+              Tente redefinir a busca no topo ou trocar de aba.
+            </p>
+          </div>
+        )}
 
-            // Check what properties are searched/exposed
-            const isIdDemoExposed = shouldShowProperty("id_demo", item.id_demo);
-            const isDescExposed = shouldShowProperty("descricao", item.id_demo);
-            const isIdadeExposed = shouldShowProperty("idade", item.id_demo);
-            const isPesoExposed = shouldShowProperty("peso_base", item.id_demo);
-            const isAddTagsExposed = shouldShowProperty("add_tags", item.id_demo);
+        {/* RESULTS SUGGESTION PILLS ARRAY (Painel de Escolhas) */}
+        {searchQuery && totalMatchesCount > 0 && (
+          <div className="space-y-1">
+            <div className="text-[8px] uppercase tracking-wider text-slate-500 font-mono font-bold select-none">
+              Passo 1: Selecione a chave para editar
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {slicedSuggests.map(({ item, idx }) => {
+                const uniqueIdKey = `${activeSubTab}_${idx}`;
+                const isSelected = selectedBlockKey === uniqueIdKey;
+                
+                // Construct labels depending on types securely
+                let labelText = "";
+                let itemWeight = 0;
+                if (activeSubTab === "demo") {
+                  const x = item as Demografia;
+                  labelText = `[DEM] ${x.id_demo} - ${x.descricao}`;
+                  itemWeight = x.peso_base;
+                } else if (activeSubTab === "socio") {
+                  const x = item as Socioeconomico;
+                  labelText = `[PROF] ${x.id_socio} - ${x.profissao}`;
+                  itemWeight = x.peso_base;
+                } else if (activeSubTab === "cid") {
+                  const x = item as CidadeDef;
+                  labelText = `[CID] ${x.id_cidade} - ${x.nome_cidade}`;
+                  itemWeight = x.peso_base;
+                } else if (activeSubTab === "est") {
+                  const x = item as Estado;
+                  labelText = `[EST] ${x.id_estado} - ${x.nome_estado}`;
+                  itemWeight = x.peso_base;
+                } else if (activeSubTab === "nom") {
+                  const x = item as NomeDef;
+                  labelText = `[NOM] ${x.id_nome} - ${x.nome}`;
+                  itemWeight = x.peso_base;
+                } else if (activeSubTab === "tags") {
+                  const x = item as TagDef;
+                  labelText = `[TAG] #${x.tag}`;
+                }
 
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#ffb200" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localDemo.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-slate-900 font-bold`}
+                const styleProps = isSelected ? {
+                  borderColor: activeColor,
+                  color: "#ffffff",
+                  backgroundColor: `${activeColor}20`
+                } : undefined;
+
+                return (
+                  <button
+                    key={uniqueIdKey}
+                    type="button"
+                    style={styleProps}
+                    onClick={() => setSelectedBlockKey(isSelected ? null : uniqueIdKey)}
+                    className={`py-1 px-2 rounded-lg border text-[9px] font-mono transition-all flex items-center justify-between gap-1.5 cursor-pointer max-w-[200px] sm:max-w-[250px] ${
+                      isSelected 
+                        ? "shadow-[0_0_6px_rgba(255,191,0,0.15)] font-bold text-white"
+                        : "bg-[#10121a]/85 border-slate-900 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="truncate">{labelText}</span>
+                    {activeSubTab !== "tags" && (
+                      <span className="opacity-45 text-[7px]">W:{itemWeight}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* SELECTED ITEM HIGH-CONTRAST PUZZLE BLOCK EDITOR (Painel de Edição Focada) */}
+        {selectedIndex !== -1 && (
+          <div className="mt-2 space-y-1.5 animate-fade-in relative z-30">
+            <div className="flex items-center justify-between select-none">
+              <div className="text-[8px] uppercase tracking-wider text-slate-500 font-mono font-bold flex items-center gap-1.5">
+                <Sliders className="w-2.5 h-2.5 text-slate-500" />
+                <span>Passo 2: Ajuste os parâmetros do bloco</span>
+              </div>
+              
+              <button
+                type="button"
+                onClick={() => setSelectedBlockKey(null)}
+                className="text-[9px] font-mono text-slate-400 hover:text-white flex items-center gap-0.5 hover:bg-slate-900 px-1 py-0.5 rounded transition-all cursor-pointer"
               >
-                {/* Puzzle connections */}
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#ffb200] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
-                )}
-                <div 
-                  style={{ backgroundColor: "#ffb200" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
+                <X className="w-2.5 h-2.5" />
+                <span>Recolher</span>
+              </button>
+            </div>
 
-                {/* Reorder actions in the jigsaw connector space for mobile accessibility */}
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-stone-900 disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localDemo.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-stone-900 disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
+            {/* Visual Block Element (Colored, with jigsaw physical puzzle notches) */}
+            <div 
+              style={{ backgroundColor: activeColor }}
+              className="relative pl-6 pr-2 py-2 flex flex-col gap-2.5 rounded-lg border border-black/10 text-white font-bold text-[10px] shadow-lg animate-slide-up"
+            >
+              {/* Scratch physical logic alignment tabs */}
+              <div className="absolute top-[-2.5px] left-8 w-4 h-1.5 bg-[#08090d] rounded-b border-b border-x border-black/15 z-10" />
+              <div style={{ backgroundColor: activeColor }} className="absolute bottom-[-3px] left-8 w-4 h-1 rounded-b border-b border-x border-black/15 z-20" />
+
+              {/* Jigsaw physical top side controls */}
+              <div className="flex items-center justify-between gap-1 bg-black/15 rounded-md px-1.5 py-1">
+                <div className="flex items-center gap-1">
+                  <span className="font-mono bg-white/20 text-white px-1 py-0.5 rounded text-[8px] tracking-widest uppercase">
+                    {activeSubTab === "demo" ? "DEMOGRAFIA" :
+                     activeSubTab === "socio" ? "SOCIOPROFISSÃO" :
+                     activeSubTab === "cid" ? "LOCAL_CIDADE" :
+                     activeSubTab === "est" ? "LOCAL_ESTADO" :
+                     activeSubTab === "nom" ? "REGISTRO_NOME" : "MOD_ATRIBUTO"}
+                  </span>
+                  <span className="opacity-80 text-[9px] font-mono">Índice: #{selectedIndex + 1}</span>
                 </div>
 
-                {/* Phrase description */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-stone-900 font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><Sparkles className="w-3 h-3" /> DEMO {idx + 1}:</span>
-                  
-                  {/* COMPACT VIEW METRICS */}
-                  {!isIdDemoExposed && !isDescExposed && !isIdadeExposed && !isPesoExposed && !isAddTagsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1 rounded text-[10px]">{item.id_demo}</span>
-                      <span className="font-sans font-black">"{item.descricao}"</span>
-                      <span className="opacity-70">({item.idade_min}-{item.idade_max} anos)</span>
-                      <span className="font-mono opacity-85 bg-black/5 px-1 rounded text-[10px]">W: {item.peso_base}</span>
-                    </div>
-                  ) : null}
+                <div className="flex items-center gap-1 font-mono">
+                  {/* Lock parameter to lock decision calculations */}
+                  {activeSubTab !== "tags" && (
+                    <button
+                      type="button"
+                      onClick={() => toggleLocalLock(`${activeSubTab}_${selectedIndex}`)}
+                      className={`p-1 rounded cursor-pointer transition-all ${
+                        localLocks[`${activeSubTab}_${selectedIndex}`]
+                          ? "bg-stone-950 text-amber-400 border border-stone-800"
+                          : "text-white/60 hover:text-white hover:bg-white/10"
+                      }`}
+                      title="Forçar trava neste peso"
+                    >
+                      {localLocks[`${activeSubTab}_${selectedIndex}`] ? (
+                        <Lock className="w-3 h-3 text-red-400" />
+                      ) : (
+                        <Unlock className="w-3 h-3 text-slate-100" />
+                      )}
+                    </button>
+                  )}
 
-                  {/* ID EXPOSED */}
-                  {isIdDemoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/40 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">id:</span>
+                  {/* Move Up/Down to shift block prioritizations flow */}
+                  <div className="flex items-center gap-0.5 bg-black/25 rounded p-0.5">
+                    <button 
+                      type="button" 
+                      disabled={selectedIndex === 0} 
+                      onClick={() => moveBlockUp(selectedIndex)} 
+                      className="p-0.5 text-white disabled:opacity-20 cursor-pointer hover:bg-white/10 rounded"
+                    >
+                      <ArrowUp className="w-2.5 h-2.5" />
+                    </button>
+                    <button 
+                      type="button" 
+                      disabled={
+                        activeSubTab === "demo" ? selectedIndex === localDemo.length - 1 :
+                        activeSubTab === "socio" ? selectedIndex === localSocio.length - 1 :
+                        activeSubTab === "cid" ? selectedIndex === localCid.length - 1 :
+                        activeSubTab === "est" ? selectedIndex === localEst.length - 1 :
+                        activeSubTab === "nom" ? selectedIndex === localNom.length - 1 :
+                        selectedIndex === localTags.length - 1
+                      } 
+                      onClick={() => moveBlockDown(selectedIndex)} 
+                      className="p-0.5 text-white disabled:opacity-20 cursor-pointer hover:bg-white/10 rounded"
+                    >
+                      <ArrowDown className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+
+                  {/* Remove Block */}
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (window.confirm("Deseja realmente deletar esta matriz de dados?")) {
+                        deleteBlock(selectedIndex);
+                      }
+                    }} 
+                    className="p-1 text-white hover:text-black hover:bg-white/10 rounded cursor-pointer ml-1"
+                    title="Remover"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Block Editable Fields Interface */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-white font-semibold">
+                
+                {/* 3.1 DEMOGRAFIA PARAMETERS */}
+                {activeSubTab === "demo" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">ID Unico</span>
                       <input
                         type="text"
-                        value={item.id_demo}
+                        value={localDemo[selectedIndex].id_demo}
                         onChange={(e) => {
                           const copy = [...localDemo];
-                          copy[idx].id_demo = e.target.value;
+                          copy[selectedIndex].id_demo = e.target.value;
                           setLocalDemo(copy);
                         }}
-                        className="w-22 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* DESC EXPOSED */}
-                  {isDescExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/40 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">desc:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Descrição Humanizada</span>
                       <input
                         type="text"
-                        value={item.descricao}
+                        value={localDemo[selectedIndex].descricao}
                         onChange={(e) => {
                           const copy = [...localDemo];
-                          copy[idx].descricao = e.target.value;
+                          copy[selectedIndex].descricao = e.target.value;
                           setLocalDemo(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none focus:ring-1 focus:ring-amber-500"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* IDADE EXPOSED */}
-                  {isIdadeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/40 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">idades:</span>
-                      <input
-                        type="number"
-                        value={item.idade_min}
-                        onChange={(e) => {
-                          const copy = [...localDemo];
-                          copy[idx].idade_min = parseInt(e.target.value) || 0;
-                          setLocalDemo(copy);
-                        }}
-                        className="w-9 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none focus:ring-1 focus:ring-amber-500"
-                      />
-                      <span className="opacity-50">a</span>
-                      <input
-                        type="number"
-                        value={item.idade_max}
-                        onChange={(e) => {
-                          const copy = [...localDemo];
-                          copy[idx].idade_max = parseInt(e.target.value) || 0;
-                          setLocalDemo(copy);
-                        }}
-                        className="w-9 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none focus:ring-1 focus:ring-amber-500"
-                      />
-                    </div>
-                  )}
-
-                  {/* WEIGHT EXPOSED */}
-                  {isPesoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/40 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">peso:</span>
-                      <input
-                        type="text"
-                        value={item.peso_base}
-                        onChange={(e) => {
-                          const parsed = getNormalizedWeight(e.target.value, blockKey);
-                          const copy = [...localDemo];
-                          copy[idx].peso_base = parsed.val;
-                          setLocalDemo(copy);
-                        }}
-                        className="w-10 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none focus:ring-1 focus:ring-amber-500"
-                      />
-                    </div>
-                  )}
-
-                  {/* TAGS RENDERED AS INDIVIDUAL INTERNAL BLOCK PILLS */}
-                  <div className="inline-flex flex-wrap items-center gap-1 pl-1">
-                    {item.add_tags.map((tag) => 
-                      renderTagPill(tag, () => {
-                        const copy = [...localDemo];
-                        copy[idx].add_tags = item.add_tags.filter(t => t !== tag);
-                        setLocalDemo(copy);
-                      }, "#ffb200")
-                    )}
-                    
-                    {/* Compact tag insert input */}
-                    <input
-                      type="text"
-                      placeholder="+ Tag"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const target = e.currentTarget;
-                          const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
-                          if (cleanVal && !item.add_tags.includes(cleanVal)) {
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Idade Limites (Mín - Máx)</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          value={localDemo[selectedIndex].idade_min}
+                          onChange={(e) => {
                             const copy = [...localDemo];
-                            copy[idx].add_tags = [...item.add_tags, cleanVal];
+                            copy[selectedIndex].idade_min = parseInt(e.target.value) || 0;
                             setLocalDemo(copy);
-                            target.value = "";
-                          }
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-12 py-0.5 px-1 text-[9px] font-mono rounded bg-white/20 hover:bg-white/45 text-stone-950 border-none outline-none placeholder:text-stone-800"
-                    />
-                  </div>
-                </div>
+                          }}
+                          className="w-full text-center px-1 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                        />
+                        <span className="opacity-60 font-mono text-[8px]">a</span>
+                        <input
+                          type="number"
+                          value={localDemo[selectedIndex].idade_max}
+                          onChange={(e) => {
+                            const copy = [...localDemo];
+                            copy[selectedIndex].idade_max = parseInt(e.target.value) || 0;
+                            setLocalDemo(copy);
+                          }}
+                          className="w-full text-center px-1 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                        />
+                      </div>
+                    </div>
 
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => toggleLocalLock(blockKey)}
-                    className={`p-1 rounded transition-all cursor-pointer ${
-                      isLocked ? "bg-stone-900 text-[#ffb200]" : "text-stone-600 hover:text-stone-900"
-                    }`}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-stone-600 hover:text-slate-950 rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Peso de Distribuição base</span>
+                      <input
+                        type="text"
+                        value={localDemo[selectedIndex].peso_base}
+                        onChange={(e) => {
+                          const parsed = getNormalizedWeight(e.target.value, `demo_${selectedIndex}`);
+                          const copy = [...localDemo];
+                          copy[selectedIndex].peso_base = parsed.val;
+                          setLocalDemo(copy);
+                        }}
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none font-black"
+                      />
+                      {inputErrors[`demo_${selectedIndex}`] && (
+                        <span className="text-[7px] text-red-200 mt-0.5">{inputErrors[`demo_${selectedIndex}`]}</span>
+                      )}
+                    </div>
 
-          {/* SOCIOECONOMICO / PROFISSOES ACTIVE BLOCKS LIST */}
-          {activeSubTab === "socio" && localSocio.map((item, idx) => {
-            const blockKey = `socio_${idx}`;
-            const isLocked = !!localLocks[blockKey];
-            const errorMsg = inputErrors[blockKey];
-            const isFirst = idx === 0;
-
-            const isIdSocioExposed = shouldShowProperty("id_socio", item.id_socio || "");
-            const isProfExposed = shouldShowProperty("profissao", item.id_socio || "");
-            const isReqTagsExposed = shouldShowProperty("req_tags", item.id_socio || "");
-            const isMultExposed = shouldShowProperty("mult_tags", item.id_socio || "");
-            const isPesoExposed = shouldShowProperty("peso_base", item.id_socio || "");
-            const isAddTagsExposed = shouldShowProperty("add_tags", item.id_socio || "");
-
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#9966ff" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localSocio.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-white font-bold`}
-              >
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#9966ff] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
+                    <div className="sm:col-span-2 flex flex-col gap-1 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Gera Atributos / Tags Aditivas ({localDemo[selectedIndex].add_tags.length})</span>
+                      <div className="flex flex-wrap items-center gap-1 bg-stone-950/40 p-1.5 rounded-md border border-white/5">
+                        {localDemo[selectedIndex].add_tags.map(t => 
+                          renderTagPill(t, () => {
+                            const copy = [...localDemo];
+                            copy[selectedIndex].add_tags = localDemo[selectedIndex].add_tags.filter(tg => tg !== t);
+                            setLocalDemo(copy);
+                          })
+                        )}
+                        <input
+                          type="text"
+                          placeholder="Adicionar campo de tags... [Enter]"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const target = e.currentTarget;
+                              const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
+                              if (cleanVal && !localDemo[selectedIndex].add_tags.includes(cleanVal)) {
+                                const copy = [...localDemo];
+                                copy[selectedIndex].add_tags = [...localDemo[selectedIndex].add_tags, cleanVal];
+                                setLocalDemo(copy);
+                                target.value = "";
+                              }
+                              e.preventDefault();
+                            }
+                          }}
+                          className="px-2 py-0.5 bg-stone-950/70 text-white placeholder:text-stone-400 font-mono text-[8px] rounded border border-white/15 outline-none w-28 shrink-0"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div 
-                  style={{ backgroundColor: "#9966ff" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
 
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localSocio.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-white font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><Briefcase className="w-3 h-3" /> PROFISSÃO {idx + 1}:</span>
-
-                  {!isIdSocioExposed && !isProfExposed && !isReqTagsExposed && !isMultExposed && !isPesoExposed && !isAddTagsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1 rounded text-[10px] text-white">{item.id_socio}</span>
-                      <span className="font-sans font-black">"{item.profissao}"</span>
-                      <span className="font-mono opacity-85 bg-black/5 px-1 rounded text-[10px]">W: {item.peso_base}</span>
-                    </div>
-                  ) : null}
-
-                  {/* EXPOSED ID */}
-                  {isIdSocioExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">id:</span>
+                {/* 3.2 SOCIOECONOMICO / PROFISSOES PARAMETERS */}
+                {activeSubTab === "socio" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">ID Profissão</span>
                       <input
                         type="text"
-                        value={item.id_socio}
+                        value={localSocio[selectedIndex].id_socio}
                         onChange={(e) => {
                           const copy = [...localSocio];
-                          copy[idx].id_socio = e.target.value;
+                          copy[selectedIndex].id_socio = e.target.value;
                           setLocalSocio(copy);
                         }}
-                        className="w-22 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EXPOSED LABEL */}
-                  {isProfExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">label:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Nome da Ocupação</span>
                       <input
                         type="text"
-                        value={item.profissao}
+                        value={localSocio[selectedIndex].profissao}
                         onChange={(e) => {
                           const copy = [...localSocio];
-                          copy[idx].profissao = e.target.value;
+                          copy[selectedIndex].profissao = e.target.value;
                           setLocalSocio(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EXPOSED REQ TAGS */}
-                  {isReqTagsExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded text-stone-900">
-                      <span className="opacity-75 text-white">Requer tags:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Peso Base</span>
                       <input
                         type="text"
-                        value={item.req_tags.join(", ")}
+                        value={localSocio[selectedIndex].peso_base}
                         onChange={(e) => {
+                          const parsed = getNormalizedWeight(e.target.value, `socio_${selectedIndex}`);
                           const copy = [...localSocio];
-                          copy[idx].req_tags = parseTagsInput(e.target.value);
+                          copy[selectedIndex].peso_base = parsed.val;
                           setLocalSocio(copy);
                         }}
-                        className="w-28 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        placeholder="Ex: tag1, tag2"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EXPOSED MULTIPLIERS */}
-                  {isMultExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">Mults:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Tags Restritas Necessárias (Filtro)</span>
                       <input
                         type="text"
-                        value={serializeMultTags(item.mult_tags)}
+                        value={localSocio[selectedIndex].req_tags.join(", ")}
                         onChange={(e) => {
                           const copy = [...localSocio];
-                          copy[idx].mult_tags = parseMultTagsInput(e.target.value);
+                          copy[selectedIndex].req_tags = parseTagsInput(e.target.value);
                           setLocalSocio(copy);
                         }}
-                        className="w-32 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        placeholder="Ex: inteligente:1.5"
+                        placeholder="Tag1, Tag2 (vazio para nenhum)"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EXPOSED PESO BASE */}
-                  {isPesoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">peso:</span>
+                    <div className="flex flex-col gap-0.5 text-left sm:col-span-2">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Multiplicadores Regionais (Condicional Peso)</span>
                       <input
                         type="text"
-                        value={item.peso_base}
+                        value={serializeMultTags(localSocio[selectedIndex].mult_tags)}
                         onChange={(e) => {
-                          const parsed = getNormalizedWeight(e.target.value, blockKey);
                           const copy = [...localSocio];
-                          copy[idx].peso_base = parsed.val;
+                          copy[selectedIndex].mult_tags = parseMultTagsInput(e.target.value);
                           setLocalSocio(copy);
                         }}
-                        className="w-10 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        placeholder="NomeDaTag:1.5, OutraTag:0.5"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EXPOSED ADD TAGS */}
-                  <div className="inline-flex flex-wrap items-center gap-1 pl-1">
-                    <span className="opacity-50 text-[10px]">Garante:</span>
-                    {(item.add_tags || []).map((tag) => 
-                      renderTagPill(tag, () => {
-                        const copy = [...localSocio];
-                        copy[idx].add_tags = (item.add_tags || []).filter(t => t !== tag);
-                        setLocalSocio(copy);
-                      }, "#9966ff")
-                    )}
-                    <input
-                      type="text"
-                      placeholder="+ Tag"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const target = e.currentTarget;
-                          const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
-                          if (cleanVal) {
+                    <div className="sm:col-span-2 flex flex-col gap-1 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Sinalizadores Aditivos ({localSocio[selectedIndex].add_tags.length})</span>
+                      <div className="flex flex-wrap items-center gap-1 bg-stone-950/40 p-1.5 rounded-md border border-white/5">
+                        {localSocio[selectedIndex].add_tags.map(t => 
+                          renderTagPill(t, () => {
                             const copy = [...localSocio];
-                            const current = item.add_tags || [];
-                            if (!current.includes(cleanVal)) {
-                              copy[idx].add_tags = [...current, cleanVal];
-                              setLocalSocio(copy);
-                              target.value = "";
+                            copy[selectedIndex].add_tags = localSocio[selectedIndex].add_tags.filter(tg => tg !== t);
+                            setLocalSocio(copy);
+                          })
+                        )}
+                        <input
+                          type="text"
+                          placeholder="+ Tag"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const target = e.currentTarget;
+                              const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
+                              if (cleanVal && !localSocio[selectedIndex].add_tags.includes(cleanVal)) {
+                                const copy = [...localSocio];
+                                copy[selectedIndex].add_tags = [...localSocio[selectedIndex].add_tags, cleanVal];
+                                setLocalSocio(copy);
+                                target.value = "";
+                              }
+                              e.preventDefault();
                             }
-                          }
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-12 py-0.5 px-1 text-[9px] font-mono rounded bg-white/20 hover:bg-white/45 text-white border-none outline-none placeholder:text-purple-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => toggleLocalLock(blockKey)}
-                    className={`p-1 rounded transition-all cursor-pointer ${
-                      isLocked ? "bg-stone-950 text-[#9966ff]" : "text-purple-200 hover:text-white"
-                    }`}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-purple-200 hover:text-white rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* CIDADES ACTIVE BLOCKS LIST */}
-          {activeSubTab === "cid" && localCid.map((item, idx) => {
-            const blockKey = `cidade_${idx}`;
-            const isLocked = !!localLocks[blockKey];
-            const errorMsg = inputErrors[blockKey];
-            const isFirst = idx === 0;
-
-            const isIdCidadeExposed = shouldShowProperty("id_cidade", item.id_cidade);
-            const isNomeExposed = shouldShowProperty("nome_cidade", item.id_cidade);
-            const isReqTagsExposed = shouldShowProperty("req_tags", item.id_cidade);
-            const isPesoExposed = shouldShowProperty("peso_base", item.id_cidade);
-            const isAddTagsExposed = shouldShowProperty("add_tags", item.id_cidade);
-
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#0099ff" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localCid.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-white font-bold`}
-              >
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#0099ff] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
+                          }}
+                          className="px-2 py-0.5 bg-stone-950/70 text-white placeholder:text-stone-400 font-mono text-[8px] rounded border border-white/15 outline-none w-28 shrink-0"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div 
-                  style={{ backgroundColor: "#0099ff" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
 
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localCid.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-white font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><MapPin className="w-3 h-3" /> CIDADE {idx + 1}:</span>
-
-                  {!isIdCidadeExposed && !isNomeExposed && !isReqTagsExposed && !isPesoExposed && !isAddTagsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1 rounded text-[10px] text-white">{item.id_cidade}</span>
-                      <span className="font-sans font-black">"{item.nome_cidade}"</span>
-                      <span className="font-mono opacity-85 bg-black/5 px-1 rounded text-[10px]">W: {item.peso_base}</span>
-                    </div>
-                  ) : null}
-
-                  {/* ID */}
-                  {isIdCidadeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">id:</span>
+                {/* 3.3 CIDADES PARAMETERS */}
+                {activeSubTab === "cid" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">ID Cidade</span>
                       <input
                         type="text"
-                        value={item.id_cidade}
+                        value={localCid[selectedIndex].id_cidade}
                         onChange={(e) => {
                           const copy = [...localCid];
-                          copy[idx].id_cidade = e.target.value;
+                          copy[selectedIndex].id_cidade = e.target.value;
                           setLocalCid(copy);
                         }}
-                        className="w-22 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* NOME */}
-                  {isNomeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">nome:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Nome Comercial</span>
                       <input
                         type="text"
-                        value={item.nome_cidade}
+                        value={localCid[selectedIndex].nome_cidade}
                         onChange={(e) => {
                           const copy = [...localCid];
-                          copy[idx].nome_cidade = e.target.value;
+                          copy[selectedIndex].nome_cidade = e.target.value;
                           setLocalCid(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* REQ TAGS */}
-                  {isReqTagsExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded text-stone-900">
-                      <span className="opacity-75 text-white">Requer tags:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Peso Demográfico</span>
                       <input
                         type="text"
-                        value={item.req_tags.join(", ")}
+                        value={localCid[selectedIndex].peso_base}
                         onChange={(e) => {
+                          const parsed = getNormalizedWeight(e.target.value, `cid_${selectedIndex}`);
                           const copy = [...localCid];
-                          copy[idx].req_tags = parseTagsInput(e.target.value);
+                          copy[selectedIndex].peso_base = parsed.val;
                           setLocalCid(copy);
                         }}
-                        className="w-28 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        placeholder="Ex: tag1, tag2"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* PESO BASE */}
-                  {isPesoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">peso:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Estado Vinculado (Ex: EST_SP)</span>
                       <input
                         type="text"
-                        value={item.peso_base}
+                        value={localCid[selectedIndex].req_tags.join(", ")}
                         onChange={(e) => {
-                          const parsed = getNormalizedWeight(e.target.value, blockKey);
                           const copy = [...localCid];
-                          copy[idx].peso_base = parsed.val;
+                          copy[selectedIndex].req_tags = parseTagsInput(e.target.value);
                           setLocalCid(copy);
                         }}
-                        className="w-10 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        placeholder="EST_UF"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* TAGS AS INDIVIDUAL SUB-BLOCK BADGES */}
-                  <div className="inline-flex flex-wrap items-center gap-1 pl-1">
-                    {(item.add_tags || []).map((tag) => 
-                      renderTagPill(tag, () => {
-                        const copy = [...localCid];
-                        copy[idx].add_tags = (item.add_tags || []).filter(t => t !== tag);
-                        setLocalCid(copy);
-                      }, "#0099ff")
-                    )}
-                    <input
-                      type="text"
-                      placeholder="+ Tag"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const target = e.currentTarget;
-                          const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
-                          if (cleanVal) {
+                    <div className="sm:col-span-2 flex flex-col gap-1 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Tags Regionais Adicionais ({localCid[selectedIndex].add_tags.length})</span>
+                      <div className="flex flex-wrap items-center gap-1 bg-stone-950/40 p-1.5 rounded-md border border-white/5">
+                        {localCid[selectedIndex].add_tags.map(t => 
+                          renderTagPill(t, () => {
                             const copy = [...localCid];
-                            const current = item.add_tags || [];
-                            if (!current.includes(cleanVal)) {
-                              copy[idx].add_tags = [...current, cleanVal];
-                              setLocalCid(copy);
-                              target.value = "";
+                            copy[selectedIndex].add_tags = localCid[selectedIndex].add_tags.filter(tg => tg !== t);
+                            setLocalCid(copy);
+                          })
+                        )}
+                        <input
+                          type="text"
+                          placeholder="+ Tag"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const target = e.currentTarget;
+                              const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
+                              if (cleanVal && !localCid[selectedIndex].add_tags.includes(cleanVal)) {
+                                const copy = [...localCid];
+                                copy[selectedIndex].add_tags = [...localCid[selectedIndex].add_tags, cleanVal];
+                                setLocalCid(copy);
+                                target.value = "";
+                              }
+                              e.preventDefault();
                             }
-                          }
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-12 py-0.5 px-1 text-[9px] font-mono rounded bg-white/20 hover:bg-white/45 text-white border-none outline-none placeholder:text-blue-105"
-                    />
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => toggleLocalLock(blockKey)}
-                    className={`p-1 rounded transition-all cursor-pointer ${
-                      isLocked ? "bg-stone-950 text-[#0099ff]" : "text-blue-200 hover:text-white"
-                    }`}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-blue-200 hover:text-white rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* ESTADOS ACTIVE BLOCKS LIST */}
-          {activeSubTab === "est" && localEst.map((item, idx) => {
-            const blockKey = `estado_${idx}`;
-            const isLocked = !!localLocks[blockKey];
-            const errorMsg = inputErrors[blockKey];
-            const isFirst = idx === 0;
-
-            const isIdEstadoExposed = shouldShowProperty("id_estado", item.id_estado);
-            const isNomeExposed = shouldShowProperty("nome_estado", item.id_estado);
-            const isPesoExposed = shouldShowProperty("peso_base", item.id_estado);
-            const isAddTagsExposed = shouldShowProperty("add_tags", item.id_estado);
-
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#5cb85c" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localEst.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-white font-bold`}
-              >
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#5cb85c] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
+                          }}
+                          className="px-2 py-0.5 bg-stone-950/70 text-white placeholder:text-stone-400 font-mono text-[8px] rounded border border-white/15 outline-none w-28 shrink-0"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div 
-                  style={{ backgroundColor: "#5cb85c" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
 
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localEst.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-white font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><Map className="w-3 h-3" /> ESTADO {idx + 1}:</span>
-
-                  {!isIdEstadoExposed && !isNomeExposed && !isPesoExposed && !isAddTagsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1 rounded text-[10px] text-white">{item.id_estado}</span>
-                      <span className="font-sans font-black">"{item.nome_estado}"</span>
-                      <span className="font-mono opacity-85 bg-black/5 px-1 rounded text-[10px]">W: {item.peso_base}</span>
-                    </div>
-                  ) : null}
-
-                  {/* UF SIGLA / ID */}
-                  {isIdEstadoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">id:</span>
+                {/* 3.4 ESTADOS PARAMETERS */}
+                {activeSubTab === "est" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">UF Código</span>
                       <input
                         type="text"
-                        value={item.id_estado}
-                        maxLength={3}
+                        value={localEst[selectedIndex].id_estado}
                         onChange={(e) => {
                           const copy = [...localEst];
-                          copy[idx].id_estado = e.target.value.toUpperCase();
+                          copy[selectedIndex].id_estado = e.target.value;
                           setLocalEst(copy);
                         }}
-                        className="w-14 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* NOME ESTADO */}
-                  {isNomeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">estado:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Nome do Estado</span>
                       <input
                         type="text"
-                        value={item.nome_estado}
+                        value={localEst[selectedIndex].nome_estado}
                         onChange={(e) => {
                           const copy = [...localEst];
-                          copy[idx].nome_estado = e.target.value;
+                          copy[selectedIndex].nome_estado = e.target.value;
                           setLocalEst(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* PESO BASE */}
-                  {isPesoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">peso:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Peso Regional</span>
                       <input
                         type="text"
-                        value={item.peso_base}
+                        value={localEst[selectedIndex].peso_base}
                         onChange={(e) => {
-                          const parsed = getNormalizedWeight(e.target.value, blockKey);
+                          const parsed = getNormalizedWeight(e.target.value, `est_${selectedIndex}`);
                           const copy = [...localEst];
-                          copy[idx].peso_base = parsed.val;
+                          copy[selectedIndex].peso_base = parsed.val;
                           setLocalEst(copy);
                         }}
-                        className="w-10 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* TAGS COLLAPSED TO A PILL BLOCK CHAIN */}
-                  <div className="inline-flex flex-wrap items-center gap-1 pl-1">
-                    {(item.add_tags || []).map((tag) => 
-                      renderTagPill(tag, () => {
-                        const copy = [...localEst];
-                        copy[idx].add_tags = (item.add_tags || []).filter(t => t !== tag);
-                        setLocalEst(copy);
-                      }, "#5cb85c")
-                    )}
-                    <input
-                      type="text"
-                      placeholder="+ Tag"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const target = e.currentTarget;
-                          const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
-                          if (cleanVal) {
+                    <div className="sm:col-span-2 flex flex-col gap-1 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Matriz de Clima / Tags aditivas ({localEst[selectedIndex].add_tags.length})</span>
+                      <div className="flex flex-wrap items-center gap-1 bg-stone-950/40 p-1.5 rounded-md border border-white/5">
+                        {localEst[selectedIndex].add_tags.map(t => 
+                          renderTagPill(t, () => {
                             const copy = [...localEst];
-                            const current = item.add_tags || [];
-                            if (!current.includes(cleanVal)) {
-                              copy[idx].add_tags = [...current, cleanVal];
-                              setLocalEst(copy);
-                              target.value = "";
+                            copy[selectedIndex].add_tags = localEst[selectedIndex].add_tags.filter(tg => tg !== t);
+                            setLocalEst(copy);
+                          })
+                        )}
+                        <input
+                          type="text"
+                          placeholder="+ Tag"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const target = e.currentTarget;
+                              const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
+                              if (cleanVal && !localEst[selectedIndex].add_tags.includes(cleanVal)) {
+                                const copy = [...localEst];
+                                copy[selectedIndex].add_tags = [...localEst[selectedIndex].add_tags, cleanVal];
+                                setLocalEst(copy);
+                                target.value = "";
+                              }
+                              e.preventDefault();
                             }
-                          }
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-12 py-0.5 px-1 text-[9px] font-mono rounded bg-white/20 hover:bg-white/45 text-white border-none outline-none placeholder:text-green-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => toggleLocalLock(blockKey)}
-                    className={`p-1 rounded transition-all cursor-pointer ${
-                      isLocked ? "bg-stone-950 text-[#5cb85c]" : "text-green-200 hover:text-white"
-                    }`}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-green-200 hover:text-white rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* NOMES ACTIVE BLOCKS LIST */}
-          {activeSubTab === "nom" && localNom.map((item, idx) => {
-            const blockKey = `nome_${idx}`;
-            const isLocked = !!localLocks[blockKey];
-            const errorMsg = inputErrors[blockKey];
-            const isFirst = idx === 0;
-
-            const isIdNomeExposed = shouldShowProperty("id_nome", item.id_nome);
-            const isNomeExposed = shouldShowProperty("nome", item.id_nome);
-            const isPesoExposed = shouldShowProperty("peso_base", item.id_nome);
-            const isReqTagsExposed = shouldShowProperty("req_tags", item.id_nome);
-
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#ff6680" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localNom.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-white font-bold`}
-              >
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#ff6680] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
+                          }}
+                          className="px-2 py-0.5 bg-stone-950/70 text-white placeholder:text-stone-400 font-mono text-[8px] rounded border border-white/15 outline-none w-28 shrink-0"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div 
-                  style={{ backgroundColor: "#ff6680" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
 
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localNom.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-white font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><User className="w-3 h-3" /> NOME {idx + 1}:</span>
-
-                  {!isIdNomeExposed && !isNomeExposed && !isPesoExposed && !isReqTagsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1 rounded text-[10px] text-white">{item.id_nome}</span>
-                      <span className="font-sans font-black">"{item.nome}"</span>
-                      <span className="font-mono opacity-85 bg-black/5 px-1 rounded text-[10px]">W: {item.peso_base}</span>
-                    </div>
-                  ) : null}
-
-                  {/* ID */}
-                  {isIdNomeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">id:</span>
+                {/* 3.5 NOMES PARAMETERS */}
+                {activeSubTab === "nom" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">ID Semente</span>
                       <input
                         type="text"
-                        value={item.id_nome}
+                        value={localNom[selectedIndex].id_nome}
                         onChange={(e) => {
                           const copy = [...localNom];
-                          copy[idx].id_nome = e.target.value;
+                          copy[selectedIndex].id_nome = e.target.value;
                           setLocalNom(copy);
                         }}
-                        className="w-22 px-1 py-0.5 font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* NOME VALUE */}
-                  {isNomeExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">nome:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Nome da Pessoa</span>
                       <input
                         type="text"
-                        value={item.nome}
+                        value={localNom[selectedIndex].nome}
                         onChange={(e) => {
                           const copy = [...localNom];
-                          copy[idx].nome = e.target.value;
+                          copy[selectedIndex].nome = e.target.value;
                           setLocalNom(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* PESO MAP */}
-                  {isPesoExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">peso:</span>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Peso Base</span>
                       <input
                         type="text"
-                        value={item.peso_base}
+                        value={localNom[selectedIndex].peso_base}
                         onChange={(e) => {
-                          const parsed = getNormalizedWeight(e.target.value, blockKey);
+                          const parsed = getNormalizedWeight(e.target.value, `nom_${selectedIndex}`);
                           const copy = [...localNom];
-                          copy[idx].peso_base = parsed.val;
+                          copy[selectedIndex].peso_base = parsed.val;
                           setLocalNom(copy);
                         }}
-                        className="w-10 text-center font-mono text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* REQUIRED CONTROLS AS TAG PILLS */}
-                  <div className="inline-flex flex-wrap items-center gap-1 pl-1">
-                    <span className="opacity-50 text-[10px]">Filtros req:</span>
-                    {item.req_tags.map((tag) => 
-                      renderTagPill(tag, () => {
-                        const copy = [...localNom];
-                        copy[idx].req_tags = item.req_tags.filter(t => t !== tag);
-                        setLocalNom(copy);
-                      }, "#ff6680")
-                    )}
-                    <input
-                      type="text"
-                      placeholder="+ Req"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const target = e.currentTarget;
-                          const cleanVal = target.value.trim().toLowerCase().replace(/\s+/g, "_");
-                          if (cleanVal) {
-                            const copy = [...localNom];
-                            if (!item.req_tags.includes(cleanVal)) {
-                              copy[idx].req_tags = [...item.req_tags, cleanVal];
-                              setLocalNom(copy);
-                              target.value = "";
-                            }
-                          }
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-12 py-0.5 px-1 text-[9px] font-mono rounded bg-white/20 hover:bg-white/45 text-white border-none outline-none placeholder:text-rose-200"
-                    />
-                  </div>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => toggleLocalLock(blockKey)}
-                    className={`p-1 rounded transition-all cursor-pointer ${
-                      isLocked ? "bg-stone-950 text-[#ff6680]" : "text-rose-200 hover:text-white"
-                    }`}
-                  >
-                    {isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-rose-200 hover:text-white rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* TAGS DEFINITIONS ACTIVE BLOCKS LIST */}
-          {activeSubTab === "tags" && localTags.map((item, idx) => {
-            const blockKey = `tags_${idx}`;
-            const isFirst = idx === 0;
-
-            const isTagExposed = shouldShowProperty("tag", item.tag);
-            const isModsExposed = shouldShowProperty("modificadores", item.tag) || shouldShowProperty("mod_saude", item.tag) || shouldShowProperty("mod_felicidade", item.tag) || shouldShowProperty("mod_renda_mensal", item.tag);
-
-            return (
-              <div 
-                key={blockKey}
-                style={{ backgroundColor: "#ff8c1a" }}
-                className={`relative pl-10 pr-3 py-2 flex flex-col sm:flex-row items-start sm:items-center gap-2 transition-all duration-200 select-none shadow-sm ${
-                  isFirst ? "rounded-t-xl pt-3" : ""
-                } ${
-                  idx === localTags.length - 1 ? "rounded-b-xl pb-3" : ""
-                } border-x border-b border-black/15 text-white font-bold`}
-              >
-                {isFirst ? (
-                  <div className="absolute -top-[7px] left-4 w-12 h-2 bg-[#ff8c1a] rounded-t-md border-t border-x border-black/15 z-10" />
-                ) : (
-                  <div className="absolute top-[-1px] left-8 w-6 h-1.5 bg-[#0b0c10] rounded-b-sm border-b border-x border-black/15 z-10" />
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Tags Requeridas (Ex: Mulher)</span>
+                      <input
+                        type="text"
+                        value={(localNom[selectedIndex].req_tags || []).join(", ")}
+                        onChange={(e) => {
+                          const copy = [...localNom];
+                          copy[selectedIndex].req_tags = parseTagsInput(e.target.value);
+                          setLocalNom(copy);
+                        }}
+                        placeholder="Tag, Outra"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                      />
+                    </div>
+                  </>
                 )}
-                <div 
-                  style={{ backgroundColor: "#ff8c1a" }}
-                  className="absolute bottom-[-6px] left-8 w-6 h-1.5 rounded-b-sm border-b border-x border-black/15 z-30" 
-                />
 
-                <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 z-40 bg-black/5 rounded p-0.5">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveBlockUp(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowUp className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === localTags.length - 1}
-                    onClick={() => moveBlockDown(idx)}
-                    className="p-0.5 rounded bg-black/15 hover:bg-black/35 text-white disabled:opacity-20 cursor-pointer"
-                  >
-                    <ArrowDown className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] leading-tight text-white font-semibold w-full">
-                  <span className="flex items-center gap-1 opacity-60"><Tag className="w-3 h-3" /> ATRIBUTO {idx + 1}:</span>
-
-                  {/* COMPACT VIEW */}
-                  {!isTagExposed && !isModsExposed ? (
-                    <div className="inline-flex flex-wrap items-center gap-1">
-                      <span className="font-mono bg-black/10 px-1.5 py-0.5 rounded text-[10px] text-white">#{item.tag}</span>
-                      <span className="opacity-75">Saúde: {item.mod_saude > 0 ? `+${item.mod_saude}` : item.mod_saude}</span>
-                      <span className="opacity-75">Felicidade: {item.mod_felicidade > 0 ? `+${item.mod_felicidade}` : item.mod_felicidade}</span>
-                      <span className="opacity-75">Renda: {item.mod_renda_mensal > 0 ? `+${item.mod_renda_mensal}` : item.mod_renda_mensal}</span>
-                    </div>
-                  ) : null}
-
-                  {/* EDIT TAG NAME */}
-                  {isTagExposed && (
-                    <div className="inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded">
-                      <span className="opacity-75">nome:</span>
+                {/* 3.6 TAGS PARAMETERS */}
+                {activeSubTab === "tags" && (
+                  <>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Tag ID</span>
                       <input
                         type="text"
-                        value={item.tag}
+                        value={localTags[selectedIndex].tag}
                         onChange={(e) => {
                           const copy = [...localTags];
-                          copy[idx].tag = e.target.value.toLowerCase().replace(/\s+/g, "_");
+                          copy[selectedIndex].tag = e.target.value;
                           setLocalTags(copy);
                         }}
-                        className="w-24 px-1 py-0.5 text-[10px] rounded bg-white text-stone-900 border-none outline-none"
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
                       />
                     </div>
-                  )}
 
-                  {/* EDIT HEALTH/HAPPINESS/INCOME MODS */}
-                  {isModsExposed && (
-                    <div className="inline-flex flex-wrap items-center gap-2 bg-white/20 px-2 py-0.5 rounded">
-                      <div className="flex items-center gap-1">
-                        <span className="opacity-75">Saúde:</span>
-                        <input
-                          type="number"
-                          value={item.mod_saude}
-                          onChange={(e) => {
-                            const copy = [...localTags];
-                            copy[idx].mod_saude = parseInt(e.target.value) || 0;
-                            setLocalTags(copy);
-                          }}
-                          className="w-10 text-center text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <span className="opacity-75">Feliz:</span>
-                        <input
-                          type="number"
-                          value={item.mod_felicidade}
-                          onChange={(e) => {
-                            const copy = [...localTags];
-                            copy[idx].mod_felicidade = parseInt(e.target.value) || 0;
-                            setLocalTags(copy);
-                          }}
-                          className="w-10 text-center text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <span className="opacity-75">Renda:</span>
-                        <input
-                          type="number"
-                          value={item.mod_renda_mensal}
-                          onChange={(e) => {
-                            const copy = [...localTags];
-                            copy[idx].mod_renda_mensal = parseInt(e.target.value) || 0;
-                            setLocalTags(copy);
-                          }}
-                          className="w-12 text-center text-[10px] rounded bg-white text-stone-900 border-none outline-none"
-                        />
-                      </div>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Mod Saúde (Inteiro +/-)</span>
+                      <input
+                        type="number"
+                        value={localTags[selectedIndex].mod_saude}
+                        onChange={(e) => {
+                          const copy = [...localTags];
+                          copy[selectedIndex].mod_saude = parseInt(e.target.value, 10) || 0;
+                          setLocalTags(copy);
+                        }}
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                      />
                     </div>
-                  )}
-                </div>
 
-                {/* Controls */}
-                <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto mt-1 sm:mt-0 select-none">
-                  <button
-                    type="button"
-                    onClick={() => deleteBlock(idx)}
-                    className="p-1 hover:bg-black/10 text-orange-200 hover:text-white rounded transition-all cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Mod Felicidade (Inteiro +/-)</span>
+                      <input
+                        type="number"
+                        value={localTags[selectedIndex].mod_felicidade}
+                        onChange={(e) => {
+                          const copy = [...localTags];
+                          copy[selectedIndex].mod_felicidade = parseInt(e.target.value, 10) || 0;
+                          setLocalTags(copy);
+                        }}
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-0.5 text-left">
+                      <span className="text-[8px] uppercase tracking-wider text-white/70">Mod Renda Mensal (+/- Valor)</span>
+                      <input
+                        type="number"
+                        value={localTags[selectedIndex].mod_renda_mensal}
+                        onChange={(e) => {
+                          const copy = [...localTags];
+                          copy[selectedIndex].mod_renda_mensal = parseInt(e.target.value, 10) || 0;
+                          setLocalTags(copy);
+                        }}
+                        className="w-full px-2 py-1 bg-stone-950/65 focus:bg-stone-950 text-white font-mono text-[9px] rounded-md border border-white/10 outline-none"
+                      />
+                    </div>
+                  </>
+                )}
+
               </div>
-            );
-          })}
 
-        </div>
+              {/* Conclude Button to save/exit focus cleanly on mobile */}
+              <div className="flex items-center justify-end select-none bg-black/5 p-1 rounded-md mt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBlockKey(null)}
+                  className="py-1 px-3 bg-white text-stone-950 rounded font-black font-mono text-[9px] cursor-pointer hover:bg-white/90 active:scale-95 transition-all"
+                >
+                  Concluir Edição ✓
+                </button>
+              </div>
 
-        {/* BOTTOM WORKSPACE BUTTON TO INLINE CUSTOM NEW BLOCKS */}
-        <div className="mt-6 flex justify-center relative z-20">
-          <button
-            type="button"
-            onClick={createBlankBlock}
-            style={{ backgroundColor: activeColor }}
-            className="px-6 py-2 rounded-full text-slate-950 font-black font-sans uppercase tracking-wider text-[10px] sm:text-xs shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 hover:brightness-110 cursor-pointer border-b-2 border-black/30 text-stone-900"
-          >
-            <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-            <span>Adicionar Novo Bloco</span>
-          </button>
-        </div>
+            </div>
+          </div>
+        )}
 
       </div>
-
-      {/* DETAILED DIAGNOSTICS HELP BLOCK FOR GOOGLE SHEETS PIPELINE */}
-      <div className="p-4 rounded-2xl bg-slate-950/45 border border-slate-900 grid grid-cols-1 md:grid-cols-3 gap-4 text-left font-sans">
-        <div className="space-y-1">
-          <h4 className="text-[#ffbf00] font-black uppercase text-xs flex items-center gap-1.5 font-display">
-            <AlertCircle className="w-3.5 h-3.5 text-[#ffbf00]" />
-            <span>1. Filtre a Propriedade</span>
-          </h4>
-          <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
-            Digite ou clique nos atalhos para focar em chaves e pesos. Os blocos se adaptam mostrando apenas o necessário para edição rápida.
-          </p>
-        </div>
-
-        <div className="space-y-1">
-          <h4 className="text-[#9966ff] font-black uppercase text-xs flex items-center gap-1.5 font-display">
-            <FileSpreadsheet className="w-3.5 h-3.5 text-[#9966ff]" />
-            <span>2. Copie para Área de Transferência</span>
-          </h4>
-          <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
-            Copie a matriz gerada em formato TSV. Ela está otimizada com formatação tabular perfeita para o Google Sheets.
-          </p>
-        </div>
-
-        <div className="space-y-1">
-          <h4 className="text-[#0099ff] font-black uppercase text-xs flex items-center gap-1.5 font-display">
-            <Plus className="w-3.5 h-3.5 text-[#0099ff]" />
-            <span>3. Cole no Sheets</span>
-          </h4>
-          <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
-            Selecione tudo na aba correspondente na planilha e cole com <strong>Ctrl+V</strong>. Em seguida, reinicie o Simulador de NPCs.
-          </p>
-        </div>
-      </div>
-
     </div>
   );
 };

@@ -14,6 +14,7 @@ import { NPCCard } from "./components/NPCCard";
 import { MatrixEditor } from "./components/MatrixEditor";
 import { NPCHistory } from "./components/NPCHistory";
 import { BlockMatrixEditor } from "./components/BlockMatrixEditor";
+import { BatchGenerator } from "./components/BatchGenerator";
 import { parseNomesCSV, parseCidadesCSV, parseSocioeconomicoCSV, parseDemografiaCSV, parseEstadosCSV, parseTagDefCSV } from "./utils/csvParser";
 import { 
   Dices, 
@@ -31,7 +32,8 @@ import {
   Lock,
   Unlock,
   ArrowRight,
-  Workflow
+  Workflow,
+  Cpu
 } from "lucide-react";
 
 // SUB-COMPONENT: PROBABILITY BAR IN CYBERPUNK MINIMALIST STYLE
@@ -279,7 +281,7 @@ export default function App() {
     return saved || "87295";
   });
   const [seedInputText, setSeedInputText] = useState<string>(activeSeed);
-  const [activeMenu, setActiveMenu] = useState<"simulador" | "matrizes" | "editor">("simulador");
+  const [activeMenu, setActiveMenu] = useState<"simulador" | "matrizes" | "editor" | "batch">("simulador");
 
   // 3. Saved NPC Roster History
   const [savedNpcs, setSavedNpcs] = useState<NPC[]>(() => {
@@ -582,41 +584,53 @@ export default function App() {
 
       {/* 2. NAVIGATION TABS */}
       <div className="max-w-7xl mx-auto w-full mb-4">
-        <div className="flex flex-col sm:flex-row border-b border-slate-800 p-1 gap-1 sm:gap-2 bg-slate-950/40 rounded-xl sm:rounded-t-xl sm:rounded-b-none">
+        <div className="grid grid-cols-4 sm:flex sm:flex-row border-b border-slate-800 p-1 gap-1 bg-slate-950/40 rounded-xl sm:rounded-t-xl sm:rounded-b-none">
           <button
             onClick={() => setActiveMenu("simulador")}
-            className={`flex-1 py-2 px-4 sm:py-3 sm:px-6 text-xs sm:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 ${
+            className={`py-2 px-1 sm:flex-1 sm:py-3 sm:px-6 text-[10px] sm:text-xs md:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 ${
               activeMenu === "simulador"
                 ? "bg-slate-900/40 text-[#FFBF00] border-t border-x border-slate-800/80 font-bold"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Sparkles className={`w-3.5 h-3.5 ${activeMenu === "simulador" ? "text-[#FFBF00]" : "text-slate-500"}`} />
+            <Sparkles className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${activeMenu === "simulador" ? "text-[#FFBF00]" : "text-slate-500"}`} />
             <span>Simulador</span>
           </button>
 
           <button
             onClick={() => setActiveMenu("matrizes")}
-            className={`flex-1 py-2 px-4 sm:py-3 sm:px-6 text-xs sm:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 ${
+            className={`py-2 px-1 sm:flex-1 sm:py-3 sm:px-6 text-[10px] sm:text-xs md:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 ${
               activeMenu === "matrizes"
                 ? "bg-slate-900/40 text-[#FFBF00] border-t border-x border-slate-800/80 font-bold"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Database className="w-3.5 h-3.5 text-slate-400" />
-            <span>Matrizes de Regras</span>
+            <Database className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400" />
+            <span>Matrizes<span className="hidden sm:inline"> de Regras</span></span>
           </button>
 
           <button
             onClick={() => setActiveMenu("editor")}
-            className={`flex-1 py-2 px-4 sm:py-3 sm:px-6 text-xs sm:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 ${
+            className={`py-2 px-1 sm:flex-1 sm:py-3 sm:px-6 text-[10px] sm:text-xs md:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 ${
               activeMenu === "editor"
                 ? "bg-slate-900/40 text-[#FFBF00] border-t border-x border-slate-800/80 font-bold"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            <Workflow className={`w-3.5 h-3.5 ${activeMenu === "editor" ? "text-[#FFBF00]" : "text-slate-500"}`} />
-            <span>Editor de Matrizes</span>
+            <Workflow className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${activeMenu === "editor" ? "text-[#FFBF00]" : "text-slate-500"}`} />
+            <span>Editor<span className="hidden sm:inline"> de Matrizes</span></span>
+          </button>
+
+          <button
+            onClick={() => setActiveMenu("batch")}
+            className={`py-2 px-1 sm:flex-1 sm:py-3 sm:px-6 text-[10px] sm:text-xs md:text-sm font-display font-black tracking-wide rounded-lg sm:rounded-t-lg sm:rounded-b-none transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeMenu === "batch"
+                ? "bg-slate-900/40 text-[#FFBF00] border-t border-x border-slate-800/80 font-bold"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Cpu className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${activeMenu === "batch" ? "text-[#FFBF00]" : "text-slate-550"}`} />
+            <span>Gerador<span className="hidden sm:inline"> em Massa</span></span>
           </button>
         </div>
       </div>
@@ -972,6 +986,18 @@ export default function App() {
             cidades={cidades}
             onResetFromSheets={syncDatabaseFromGoogleSheets}
             isSyncing={sheetSyncStatus === "loading"}
+          />
+        )}
+
+        {/* VIEW 4: BATCH SIMULATOR RUNNER */}
+        {activeMenu === "batch" && (
+          <BatchGenerator
+            demografia={demografia}
+            socioeconomico={socioeconomico}
+            tagDef={tagDef}
+            estados={estados}
+            nomes={nomes}
+            cidades={cidades}
           />
         )}
 
