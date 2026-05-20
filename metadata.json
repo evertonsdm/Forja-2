@@ -1,0 +1,6 @@
+{
+  "name": "RuleForge Engine",
+  "description": "Gerador de NPCs determinístico e procedural baseado em matrizes relacionais e sementes (seeds).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
